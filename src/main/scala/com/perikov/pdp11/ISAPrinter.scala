@@ -1,25 +1,24 @@
 package com.perikov.pdp11
 
 object ISAPrinter extends ISA:
-  // TODO: Торчат наружу всякие методы типа defer
   import cats.Show
   import cats.syntax.show.*
 
-  enum modes:
+  private enum modes:
     case direct, inc, dec
 
-  sealed trait Mode:
-    def defered: Mode
-    def reg: Register
+  opaque type Mode = ModeImpl
+  private sealed trait ModeImpl:
+    def deferred: ModeImpl
     def defer: Boolean
     def show: String
     def deferSym = if defer then "@" else ""
 
   given Show[Mode] = _.show
 
-  case class Simple(reg: Register, mod: modes, defer: Boolean = false)
-      extends Mode:
-    override def defered: Mode = copy(defer = true)
+  private case class Simple(reg: Register, mod: modes, defer: Boolean = false)
+      extends ModeImpl:
+    override def deferred: ModeImpl = copy(defer = true)
     override def show: String =
       val p = deferSym
       mod match
@@ -30,9 +29,9 @@ object ISAPrinter extends ISA:
           then show"($reg)" 
           else Show[Register].show(reg) // prevent loop due to conversion regisger -> mode
 
-  case class Indexed(reg: Register, offset: Short, defer: Boolean = false)
-      extends Mode:
-    override def defered: Mode = copy(defer = true)
+  private case class Indexed(reg: Register, offset: Short, defer: Boolean = false)
+      extends ModeImpl:
+    override def deferred: ModeImpl = copy(defer = true)
     override def show: String =
       val p = deferSym
       show"$p$offset($reg)"
@@ -45,14 +44,14 @@ object ISAPrinter extends ISA:
     def dec: BasicMode = Simple(r, modes.dec)
     def index(offset: Short): BasicMode = Indexed(r, offset)
 
-  extension (mode: BasicMode) def defer: Mode = mode.defered
+  extension (mode: BasicMode) def defer: Mode= mode.deferred
 
-  enum Cmd:
+  private enum Cmd:
     case RegArgs(name: String, byte: Boolean, args: Seq[Mode])
     case Print(s: String)
     case Branch(name: String, offset: Byte)
 
-  given Show[Cmd] =
+  given Show[Command] =
     case Cmd.RegArgs(name, byte, args) =>
       val b = if byte then "B" else ""
       s"$name$b\t" + args.map(_.show).mkString(", ")
@@ -61,10 +60,10 @@ object ISAPrinter extends ISA:
     case Cmd.Branch(name, offset) => show"$name\t$offset"
 
 
-  def cmd(name: String, args: Mode*): Cmd.RegArgs =
+  private def cmd(name: String, args: Mode*): SizedCommand =
     Cmd.RegArgs(name, false, args)
-  type Command = Cmd
-  type SizedCommand = Cmd.RegArgs
+  opaque type Command = Cmd
+  opaque type SizedCommand <: Command = Cmd.RegArgs
   extension (s: SizedCommand) def b: Command = s.copy(byte = true)
 
   type TwoArgSized = (Mode, Mode) => SizedCommand
@@ -78,8 +77,8 @@ object ISAPrinter extends ISA:
   val sub = cmd("SUB", _, _)
   // TODO: mul,div, ash, ashc
 
-  type SingleArg = Mode => Command
-  type SingleArgSized = Mode => SizedCommand
+  type SingleArg = Mode=> Command
+  type SingleArgSized = Mode=> SizedCommand
   val jmp = cmd("JMP", _)
   val swab = cmd("SWAB", _)
   val mtps = cmd("MTPS", _)
@@ -138,5 +137,5 @@ def testPrintCommands =
   import cats.*
   import cats.syntax.show.*
   import ISAPrinter.{*, given}
-  val cmd: Cmd = mov(R0(123).defered, R1)
+  val cmd: Command = mov(R0(123).defer, R1)
   println(cmd.show)
