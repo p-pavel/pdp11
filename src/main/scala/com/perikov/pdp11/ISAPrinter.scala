@@ -51,13 +51,15 @@ object ISAPrinter extends ISA:
     case Print(s: String)
     case Branch(name: String, offset: Byte)
 
-  given Show[Command] =
+  given showCommand:Show[Command] =
     case Cmd.RegArgs(name, byte, args) =>
       val b = if byte then "B" else ""
       s"$name$b\t" + args.map(_.show).mkString(", ")
 
     case Cmd.Print(s)             => s
     case Cmd.Branch(name, offset) => show"$name\t$offset"
+
+  given Show[SizedCommand] = c => showCommand.show(c)
 
 
   private def cmd(name: String, args: Mode*): SizedCommand =
@@ -131,11 +133,3 @@ object ISAPrinter extends ISA:
 
   def clearFlags(f: Flags): Command = ???
   def setFlags(f: Flags): Command = ???
-
-@main
-def testPrintCommands =
-  import cats.*
-  import cats.syntax.show.*
-  import ISAPrinter.{*, given}
-  val cmd: Command = mov(R0(123).defer, R1)
-  println(cmd.show)
